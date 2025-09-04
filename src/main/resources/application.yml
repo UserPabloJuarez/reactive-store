@@ -1,0 +1,42 @@
+spring:
+  # Configuración reactiva para R2DBC
+  r2dbc:
+    url: r2dbc:h2:mem:///testdb?options=DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password:
+    pool:
+      initial-size: 5
+      max-size: 10
+
+  # H2 Console (solo para pruebas)
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  # Inicialización de SQL reactiva
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+      data-locations: classpath:data.sql
+      platform: h2
+
+# Logging para diagnóstico reactivo
+logging:
+  level:
+    org.springframework.r2dbc: DEBUG
+    org.springframework.data.r2dbc: DEBUG
+    io.r2dbc.spi: TRACE
+    com.example.ecommerce: DEBUG
+    reactor.core.publisher: DEBUG
+
+server:
+  port: 8081
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
