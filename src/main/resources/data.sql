@@ -52,3 +52,5 @@ INSERT INTO order_items (order_id, product_id, quantity, subtotal) VALUES
 (5, 5, 1, 150.00),   -- Teclado Mecánico
 (5, 6, 1, 80.00),    -- Mouse Inalámbrico
 (5, 7, 1, 600.00);   -- Monitor 4K
+
+ALTER TABLE products ADD COLUMN DELETED BOOLEAN DEFAULT FALSE;

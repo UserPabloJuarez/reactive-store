@@ -16,4 +16,10 @@ public interface ProductRepository extends ReactiveCrudRepository<Product, Long>
 
     @Query("SELECT * FROM products WHERE stock > 0")
     Flux<Product> findAvailableProducts();
+
+    @Query("SELECT * FROM products WHERE deleted = false")
+    Flux<Product> findAllActive();
+
+    @Query("SELECT * FROM products WHERE id = :id AND deleted = false")
+    Mono<Product> findActiveById(Long id);
 }

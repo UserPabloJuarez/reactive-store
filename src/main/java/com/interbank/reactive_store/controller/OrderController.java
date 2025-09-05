@@ -1,6 +1,7 @@
 package com.interbank.reactive_store.controller;
 
 import com.interbank.reactive_store.model.Order;
+import com.interbank.reactive_store.model.dto.CreateOrderRequest;
 import com.interbank.reactive_store.service.OrderService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -33,10 +34,17 @@ public class OrderController {
                 .defaultIfEmpty(ResponseEntity.notFound().build());
     }
 
-    @PostMapping
+    @PostMapping("/confirm")
     @ResponseStatus(HttpStatus.CREATED)
-    public Mono<Order> createOrder(@RequestBody Order order) {
-        return orderService.createOrder(order);
+    public Mono<ResponseEntity<Order>> createOrder(@RequestBody CreateOrderRequest request) {
+        return orderService.createOrder(request)
+                .map(order -> ResponseEntity.status(HttpStatus.CREATED).body(order))
+                .onErrorResume(ex -> {
+                    if (ex instanceof RuntimeException) {
+                        return Mono.just(ResponseEntity.badRequest().build());
+                    }
+                    return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build());
+                });
     }
 
     @GetMapping("/status/{status}")

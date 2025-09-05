@@ -13,7 +13,7 @@ public class SwaggerConfig {
     public OpenAPI customOpenAPI() {
         return new OpenAPI()
                 .info(new Info()
-                        .title("E-Commerce Reactive API")
+                        .title("Reactive-Store Reactive API")
                         .version("1.0.0")
                         .description("API Reactiva para Gestión de E-Commerce con Spring WebFlux")
                         .contact(new Contact()

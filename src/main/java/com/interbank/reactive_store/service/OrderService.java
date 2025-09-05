@@ -2,6 +2,9 @@ package com.interbank.reactive_store.service;
 
 import com.interbank.reactive_store.model.Order;
 import com.interbank.reactive_store.model.OrderItem;
+import com.interbank.reactive_store.model.Product;
+import com.interbank.reactive_store.model.dto.CreateOrderRequest;
+import com.interbank.reactive_store.model.dto.OrderItemRequest;
 import com.interbank.reactive_store.repository.OrderItemRepository;
 import com.interbank.reactive_store.repository.OrderRepository;
 import com.interbank.reactive_store.repository.ProductRepository;
@@ -11,7 +14,9 @@ import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class OrderService {
@@ -43,23 +48,73 @@ public class OrderService {
     }
 
     @Transactional
-    public Mono<Order> createOrder(Order order) {
+    public Mono<Order> createOrder(CreateOrderRequest request) {
+        Order order = new Order();
         order.setDate(LocalDateTime.now());
         order.setStatus("PENDING");
 
-        return calculateTotal(order.getItems())
-                .flatMap(total -> {
-                    order.setTotal(applyDiscounts(total, order.getItems()));
-                    return orderRepository.save(order);
-                })
-                .flatMap(savedOrder ->
-                        saveOrderItems(savedOrder.getId(), order.getItems())
-                                .then(updateOrderStatus(savedOrder.getId(), "CONFIRMED"))
-                )
-                .flatMap(this::loadOrderItems)
-                .onErrorResume(error -> {
-                    // Rollback automático en caso de error
-                    return Mono.error(new RuntimeException("Error al crear el pedido: " + error.getMessage()));
+        // Obtener todos los IDs de productos primero
+        List<Long> productIds = request.getItems().stream()
+                .map(OrderItemRequest::getProductId)
+                .collect(Collectors.toList());
+
+        return productRepository.findAllById(productIds)
+                .collectMap(Product::getId)
+                .flatMap(productsMap -> {
+                    List<OrderItem> items = new ArrayList<>();
+                    List<Product> productsToUpdate = new ArrayList<>();
+
+                    // Validar y procesar cada item
+                    for (OrderItemRequest itemRequest : request.getItems()) {
+                        Product product = productsMap.get(itemRequest.getProductId());
+                        if (product == null) {
+                            return Mono.error(new RuntimeException("Producto no encontrado: " + itemRequest.getProductId()));
+                        }
+                        if (product.getStock() < itemRequest.getQuantity()) {
+                            return Mono.error(new RuntimeException("Stock insuficiente para: " + product.getName()));
+                        }
+
+                        // Crear OrderItem
+                        OrderItem item = new OrderItem();
+                        item.setProductId(product.getId());
+                        item.setQuantity(itemRequest.getQuantity());
+                        item.setSubtotal(product.getPrice() * itemRequest.getQuantity());
+                        items.add(item);
+
+                        // Actualizar stock
+                        product.setStock(product.getStock() - itemRequest.getQuantity());
+                        productsToUpdate.add(product);
+                    }
+
+                    // Calcular total y asignar items
+                    double total = items.stream().mapToDouble(OrderItem::getSubtotal).sum();
+                    order.setTotal(total);
+                    order.setItems(items);
+
+                    // Guardar todo en transacción
+                    return orderRepository.save(order)
+                            .flatMap(savedOrder -> {
+                                // Asignar orderId a cada item y guardarlos
+                                List<OrderItem> itemsToSave = items.stream()
+                                        .map(item -> {
+                                            item.setOrderId(savedOrder.getId());
+                                            return item;
+                                        })
+                                        .collect(Collectors.toList());
+
+                                return orderItemRepository.saveAll(itemsToSave)
+                                        .collectList()
+                                        .flatMap(savedItems -> {
+                                            // Actualizar productos
+                                            return productRepository.saveAll(productsToUpdate)
+                                                    .collectList()
+                                                    .then(Mono.fromCallable(() -> {
+                                                        // Asignar los items guardados a la orden
+                                                        savedOrder.setItems(savedItems);
+                                                        return savedOrder;
+                                                    }));
+                                        });
+                            });
                 });
     }
 
@@ -106,9 +161,10 @@ public class OrderService {
         return orderItemRepository.findByOrderId(order.getId())
                 .collectList()
                 .map(items -> {
-                    order.setItems(items);
+                    order.setItems(items != null ? items : new ArrayList<>());
                     return order;
-                });
+                })
+                .defaultIfEmpty(order);
     }
 
     public Mono<Order> updateOrderStatus(Long orderId, String status) {

@@ -1,6 +1,8 @@
 package com.interbank.reactive_store.service;
 
 import com.interbank.reactive_store.model.Product;
+import com.interbank.reactive_store.model.dto.ProductCreateRequest;
+import com.interbank.reactive_store.model.dto.ProductUpdateRequest;
 import com.interbank.reactive_store.repository.ProductRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -27,22 +29,36 @@ public class ProductService {
         return productRepository.findById(id);
     }
 
-    public Mono<Product> createProduct(Product product) {
+    public Mono<Product> createProduct(ProductCreateRequest request) {
+        Product product = new Product();
+        product.setName(request.getName());
+        product.setPrice(request.getPrice());
+        product.setStock(request.getStock());
         return productRepository.save(product);
     }
 
-    public Mono<Product> updateProduct(Long id, Product product) {
+    public Mono<Product> updateProduct(Long id, ProductUpdateRequest request) {
         return productRepository.findById(id)
                 .flatMap(existingProduct -> {
-                    existingProduct.setName(product.getName());
-                    existingProduct.setPrice(product.getPrice());
-                    existingProduct.setStock(product.getStock());
+                    existingProduct.setName(request.getName());
+                    existingProduct.setPrice(request.getPrice());
+                    existingProduct.setStock(request.getStock());
                     return productRepository.save(existingProduct);
                 });
     }
 
+    @Transactional
     public Mono<Void> deleteProduct(Long id) {
-        return productRepository.deleteById(id);
+        return productRepository.findById(id)
+                .switchIfEmpty(Mono.error(new RuntimeException("Producto no encontrado")))
+                .flatMap(product -> {
+                    if (Boolean.TRUE.equals(product.getDeleted())) {
+                        return Mono.error(new RuntimeException("El producto ya fue eliminado"));
+                    }
+                    product.setDeleted(true);
+                    return productRepository.save(product);
+                })
+                .then();
     }
 
     @Transactional

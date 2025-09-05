@@ -1,5 +1,6 @@
 package com.interbank.reactive_store.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.Version;
 import org.springframework.data.relational.core.mapping.Table;
@@ -16,6 +17,8 @@ public class Product {
 
     @Version
     private Long version;
+
+    private Boolean deleted = false;
 
     // Constructores
     public Product() {}
@@ -64,5 +67,13 @@ public class Product {
                 ", stock=" + stock +
                 ", version=" + version +
                 '}';
+    }
+
+    public Boolean getDeleted() {
+        return deleted;
+    }
+
+    public void setDeleted(Boolean deleted) {
+        this.deleted = deleted;
     }
 }
