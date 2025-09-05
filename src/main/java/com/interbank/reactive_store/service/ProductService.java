@@ -10,6 +10,8 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import org.springframework.transaction.annotation.Transactional;
+import reactor.util.retry.Retry;
+import java.time.Duration;
 
 @Service
 public class ProductService {
@@ -44,7 +46,11 @@ public class ProductService {
                     existingProduct.setPrice(request.getPrice());
                     existingProduct.setStock(request.getStock());
                     return productRepository.save(existingProduct);
-                });
+                })
+                .retryWhen(Retry.backoff(3, Duration.ofMillis(100)))
+                .onErrorResume(OptimisticLockingFailureException.class, ex ->
+                        Mono.error(new RuntimeException("El producto fue modificado por otro usuario. Por favor, recargue e intente nuevamente."))
+                );
     }
 
     @Transactional
@@ -68,9 +74,9 @@ public class ProductService {
                     if (product.getStock() >= quantity) {
                         product.setStock(product.getStock() - quantity);
                         return productRepository.save(product)
-                                .retry(3)
-                                .onErrorMap(OptimisticLockingFailureException.class,
-                                        ex -> new RuntimeException("Conflicto de concurrencia. Intente nuevamente."));
+                                .retryWhen(Retry.backoff(3, Duration.ofMillis(100)))
+                                .onErrorResume(OptimisticLockingFailureException.class,
+                                ex -> Mono.error(new RuntimeException("Conflicto de concurrencia. Intente nuevamente.")));
                     }
                     return Mono.error(new RuntimeException("Stock insuficiente para el producto: " + product.getName()));
                 });
